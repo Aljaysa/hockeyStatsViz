@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>NHL Win Percentage</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+
+body{
+    font-family:sans-serif;
+}
+
+.line{
+    fill:none;
+    stroke-width:2;
+    opacity:0.6;
+}
+
+.line:hover{
+    stroke-width:4;
+    opacity:1;
+}
+
+.tooltip{
+    position:absolute;
+    background:white;
+    border:1px solid #ccc;
+    padding:6px;
+    font-size:12px;
+    pointer-events:none;
+}
+
+.grid line {
+  stroke: #d3d3d3;
+  stroke-opacity: 0.7;
+  shape-rendering: crispEdges;
+}
+
+.grid path {
+  stroke-width: 0;
+}
+
+</style>
+</head>
+
+<body>
+
+<h3>NHL Team Win Percentage by Season</h3>
+
+<label>Filter Division:</label>
+<select id="divisionDropdown">
+<option value="All">All Divisions</option>
+<option value="Atlantic">Atlantic</option>
+<option value="Metropolitan">Metropolitan</option>
+<option value="Central">Central</option>
+<option value="Pacific">Pacific</option>
+</select>
+
+<br><br>
+
+<label>Filter Team:</label>
+<select id="teamDropdown">
+<option value="All">All Teams</option>
+</select>
+
+<svg width="1100" height="600"></svg>
+
+<script>
+
+const margin = {top:40,right:200,bottom:60,left:70}
+const width = 1100 - margin.left - margin.right
+const height = 600 - margin.top - margin.bottom
+
+const svg = d3.select("svg")
+.append("g")
+.attr("transform",`translate(${margin.left},${margin.top})`)
+
+const tooltip = d3.select("body")
+.append("div")
+.attr("class","tooltip")
+.style("opacity",0)
+
+const divisionMap = {
+
+"Boston Bruins":"Atlantic",
+"Buffalo Sabres":"Atlantic",
+"Detroit Red Wings":"Atlantic",
+"Florida Panthers":"Atlantic",
+"Montreal Canadiens":"Atlantic",
+"Ottawa Senators":"Atlantic",
+"Tampa Bay Lightning":"Atlantic",
+"Toronto Maple Leafs":"Atlantic",
+
+"Carolina Hurricanes":"Metropolitan",
+"Columbus Blue Jackets":"Metropolitan",
+"New Jersey Devils":"Metropolitan",
+"New York Islanders":"Metropolitan",
+"New York Rangers":"Metropolitan",
+"Philadelphia Flyers":"Metropolitan",
+"Pittsburgh Penguins":"Metropolitan",
+"Washington Capitals":"Metropolitan",
+
+"Chicago Blackhawks":"Central",
+"Colorado Avalanche":"Central",
+"Dallas Stars":"Central",
+"Minnesota Wild":"Central",
+"Nashville Predators":"Central",
+"St. Louis Blues":"Central",
+"Utah Mammoth":"Central",
+"Winnipeg Jets":"Central",
+
+"Anaheim Ducks":"Pacific",
+"Calgary Flames":"Pacific",
+"Edmonton Oilers":"Pacific",
+"Los Angeles Kings":"Pacific",
+"San Jose Sharks":"Pacific",
+"Seattle Kraken":"Pacific",
+"Vancouver Canucks":"Pacific",
+"Vegas Golden Knights":"Pacific"
+
+}
+
+d3.csv("Final Proj Data.csv", d => ({
+
+season:d["Season"],
+winPct:+d["Season Win Percentage"],
+team:d["City of Team"] + " " + d["Team Name"]
+
+})).then(data=>{
+
+data = data.filter(d=>!isNaN(d.winPct))
+
+data.forEach(d=>{
+d.division = divisionMap[d.team]
+})
+
+const seasons = [...new Set(data.map(d=>d.season))].sort()
+
+const x = d3.scalePoint()
+.domain(seasons)
+.range([0,width])
+
+const y = d3.scaleLinear()
+.domain([0,1])
+.range([height,0])
+
+function makeYGridlines() {
+  return d3.axisLeft(y).ticks(10)
+}
+
+function makeXGridlines() {
+  return d3.axisBottom(x)
+}
+
+svg.append("g")
+.attr("class","grid")
+.call(makeYGridlines().tickSize(-width).tickFormat(""))
+
+svg.append("g")
+.attr("class","grid")
+.attr("transform",`translate(0,${height})`)
+.call(makeXGridlines().tickSize(-height).tickFormat(""))
+
+svg.append("g")
+.attr("transform",`translate(0,${height})`)
+.call(d3.axisBottom(x))
+.selectAll("text")
+.attr("transform","rotate(-45)")
+.style("text-anchor","end")
+
+svg.append("g")
+.call(d3.axisLeft(y))
+
+svg.append("text")
+.attr("x",width/2)
+.attr("y",height+50)
+.attr("text-anchor","middle")
+.text("Season")
+
+svg.append("text")
+.attr("transform","rotate(-90)")
+.attr("x",-height/2)
+.attr("y",-50)
+.attr("text-anchor","middle")
+.text("Season Win Percentage")
+
+const color = d3.scaleOrdinal(d3.schemeTableau10)
+
+const line = d3.line()
+.x(d=>x(d.season))
+.y(d=>y(d.winPct))
+
+let currentDivision = "All"
+let currentTeam = "All"
+
+const teamsList = [...new Set(data.map(d=>d.team))].sort()
+
+d3.select("#teamDropdown")
+.selectAll("option.teamOption")
+.data(teamsList)
+.enter()
+.append("option")
+.attr("class","teamOption")
+.attr("value",d=>d)
+.text(d=>d)
+
+function updateChart(){
+
+svg.selectAll(".line").remove()
+
+let filtered = data
+
+if(currentTeam !== "All"){
+filtered = data.filter(d=>d.team === currentTeam)
+}
+
+else if(currentDivision !== "All"){
+filtered = data.filter(d=>d.division === currentDivision)
+}
+
+const teams = d3.group(filtered,d=>d.team)
+
+teams.forEach((values,key)=>{
+
+svg.append("path")
+.datum(values.sort((a,b)=>seasons.indexOf(a.season)-seasons.indexOf(b.season)))
+.attr("class","line")
+.attr("stroke",color(key))
+.attr("d",line)
+
+.on("mouseover",(event)=>{
+
+tooltip.style("opacity",1)
+.html(key)
+.style("left",(event.pageX+10)+"px")
+.style("top",(event.pageY-20)+"px")
+
+})
+
+.on("mousemove",(event)=>{
+
+tooltip.style("left",(event.pageX+10)+"px")
+.style("top",(event.pageY-20)+"px")
+
+})
+
+.on("mouseout",()=>{
+
+tooltip.style("opacity",0)
+
+})
+
+})
+
+}
+
+updateChart()
+
+d3.select("#divisionDropdown")
+.on("change",function(){
+
+currentDivision = this.value
+currentTeam = "All"
+
+d3.select("#teamDropdown").property("value","All")
+
+updateChart()
+
+})
+
+d3.select("#teamDropdown")
+.on("change",function(){
+
+currentTeam = this.value
+updateChart()
+
+})
+
+})
+
+</script>
+
+</body>
+</html>
